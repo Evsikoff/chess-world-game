@@ -704,7 +704,12 @@
                             
                             pieceElement.onclick = (e) => {
                                 e.stopPropagation();
-                                this.selectPiece(row, col, pieceElement);
+                                // Проверяем, можно ли взять эту фигуру
+                                if(this.selectedPiece && this.availableCaptures.some(([r, c]) => r === row && c === col)) {
+                                    this.handleSquareClick(row, col);
+                                } else {
+                                    this.selectPiece(row, col, pieceElement);
+                                }
                             };
                             square.appendChild(pieceElement);
                         }
@@ -761,7 +766,12 @@
                             
                             pieceElement.onclick = (e) => {
                                 e.stopPropagation();
-                                this.selectPiece(newRow, newCol, pieceElement);
+                                // Проверяем, можно ли взять эту фигуру
+                                if(this.selectedPiece && this.availableCaptures.some(([r, c]) => r === newRow && c === newCol)) {
+                                    this.handleSquareClick(newRow, newCol);
+                                } else {
+                                    this.selectPiece(newRow, newCol, pieceElement);
+                                }
                             };
                             square.appendChild(pieceElement);
                         }
@@ -1031,7 +1041,12 @@
                         
                         newPiece.onclick = (e) => {
                             e.stopPropagation();
-                            this.selectPiece(toRow, toCol, newPiece);
+                            // Проверяем, можно ли взять эту фигуру
+                            if(this.selectedPiece && this.availableCaptures.some(([r, c]) => r === toRow && c === toCol)) {
+                                this.handleSquareClick(toRow, toCol);
+                            } else {
+                                this.selectPiece(toRow, toCol, newPiece);
+                            }
                         };
                         toSquare.appendChild(newPiece);
                         
@@ -1102,7 +1117,12 @@
                     
                     newPiece.onclick = (e) => {
                         e.stopPropagation();
-                        this.selectPiece(row, col, newPiece);
+                        // Проверяем, можно ли взять эту фигуру
+                        if(this.selectedPiece && this.availableCaptures.some(([r, c]) => r === row && c === col)) {
+                            this.handleSquareClick(row, col);
+                        } else {
+                            this.selectPiece(row, col, newPiece);
+                        }
                     };
                     square.appendChild(newPiece);
                 }
