@@ -844,97 +844,35 @@
             }
             
             calculateMoves(row, col, piece) {
-                const moves = [];
-                const captures = [];
-                const pieceType = piece.toLowerCase();
                 const isWhite = piece === piece.toUpperCase();
                 const color = isWhite ? 'white' : 'black';
-                
-                switch(pieceType) {
-                    case 'p':
-                        const direction = isWhite ? -1 : 1;
-                        const startRow = isWhite ? 6 : 1;
-                        const lastRow = isWhite ? 0 : 7;
-                        
-                        if(this.isValid(row + direction, col) && !this.board[row + direction][col]) {
-                            moves.push([row + direction, col]);
-                            
-                            if(row === startRow && !this.board[row + 2 * direction][col]) {
-                                moves.push([row + 2 * direction, col]);
-                            }
-                        }
-                        
-                        [[direction, -1], [direction, 1]].forEach(([dr, dc]) => {
-                            const newRow = row + dr;
-                            const newCol = col + dc;
-                            if(this.isValid(newRow, newCol)) {
-                                const target = this.board[newRow][newCol];
-                                if(target && ((isWhite && target === target.toLowerCase()) || 
-                                   (!isWhite && target === target.toUpperCase()))) {
-                                    captures.push([newRow, newCol]);
-                                }
-                                
-                                if(this.enPassantTarget && this.enPassantTarget.row === newRow && this.enPassantTarget.col === newCol) {
-                                    captures.push([newRow, newCol]);
-                                }
-                            }
-                        });
-                        break;
-                        
-                    case 'r':
-                        [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr, dc]) => {
-                            this.addLinearMoves(row, col, dr, dc, moves, captures, isWhite);
-                        });
-                        break;
-                        
-                    case 'n':
-                        [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr, dc]) => {
-                            const newRow = row + dr;
-                            const newCol = col + dc;
-                            if(this.isValid(newRow, newCol)) {
-                                const target = this.board[newRow][newCol];
-                                if(!target) {
-                                    moves.push([newRow, newCol]);
-                                } else if((isWhite && target === target.toLowerCase()) || 
-                                         (!isWhite && target === target.toUpperCase())) {
-                                    captures.push([newRow, newCol]);
-                                }
-                            }
-                        });
-                        break;
-                        
-                    case 'b':
-                        [[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([dr, dc]) => {
-                            this.addLinearMoves(row, col, dr, dc, moves, captures, isWhite);
-                        });
-                        break;
-                        
-                    case 'q':
-                        [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([dr, dc]) => {
-                            this.addLinearMoves(row, col, dr, dc, moves, captures, isWhite);
-                        });
-                        break;
-                        
-                    case 'k':
-                        for(let dr = -1; dr <= 1; dr++) {
-                            for(let dc = -1; dc <= 1; dc++) {
-                                if(dr === 0 && dc === 0) continue;
-                                const newRow = row + dr;
-                                const newCol = col + dc;
-                                if(this.isValid(newRow, newCol)) {
-                                    const target = this.board[newRow][newCol];
-                                    if(!target) {
-                                        moves.push([newRow, newCol]);
-                                    } else if((isWhite && target === target.toLowerCase()) || 
-                                             (!isWhite && target === target.toUpperCase())) {
-                                        captures.push([newRow, newCol]);
-                                    }
-                                }
-                            }
-                        }
-                        break;
-                }
-                
+
+                // Получаем все возможные ходы
+                const { moves: rawMoves, captures: rawCaptures } = this.calculateMovesRaw(row, col, piece);
+
+                // Фильтруем ходы, которые оставляют короля под шахом
+                const moves = [];
+                const captures = [];
+
+                rawMoves.forEach(([toRow, toCol]) => {
+                    if(!this.wouldBeInCheck(row, col, toRow, toCol, color)) {
+                        moves.push([toRow, toCol]);
+                    }
+                });
+
+                rawCaptures.forEach(([toRow, toCol]) => {
+                    // Дополнительно проверяем что не пытаемся съесть короля
+                    const targetPiece = this.board[toRow][toCol];
+                    if(targetPiece && targetPiece.toLowerCase() === 'k') {
+                        // Нельзя съесть короля - это недопустимый ход
+                        return;
+                    }
+
+                    if(!this.wouldBeInCheck(row, col, toRow, toCol, color)) {
+                        captures.push([toRow, toCol]);
+                    }
+                });
+
                 return { moves, captures };
             }
             
@@ -996,20 +934,29 @@
                 const captured = this.board[toRow][toCol];
                 const pieceType = piece.toLowerCase();
                 const isWhite = piece === piece.toUpperCase();
-                
+
+                // Проверка на взятие короля (не должно происходить, но на всякий случай)
+                if(captured && captured.toLowerCase() === 'k') {
+                    console.error('Попытка взять короля - это не должно происходить!');
+                    this.gameState = 'finished';
+                    const winner = isWhite ? 'white' : 'black';
+                    this.endGame(winner, 'checkmate');
+                    return;
+                }
+
                 let enPassantCapture = null;
-                if(pieceType === 'p' && this.enPassantTarget && 
+                if(pieceType === 'p' && this.enPassantTarget &&
                    toRow === this.enPassantTarget.row && toCol === this.enPassantTarget.col) {
                     const capturedRow = isWhite ? toRow + 1 : toRow - 1;
                     enPassantCapture = this.board[capturedRow][toCol];
                     this.board[capturedRow][toCol] = '';
-                    
+
                     const capturedSquare = document.querySelector(`.square[data-row="${capturedRow}"][data-col="${toCol}"]`);
                     if(capturedSquare) {
                         capturedSquare.innerHTML = '';
                     }
                 }
-                
+
                 this.board[toRow][toCol] = piece;
                 this.board[fromRow][fromCol] = '';
                 
@@ -1167,8 +1114,219 @@
                 document.getElementById(container).appendChild(element);
             }
             
+            isSquareUnderAttack(row, col, byColor) {
+                // Проверяет, атакована ли клетка фигурами определенного цвета
+                for(let r = 0; r < 8; r++) {
+                    for(let c = 0; c < 8; c++) {
+                        const piece = this.board[r][c];
+                        if(!piece) continue;
+
+                        const isWhite = piece === piece.toUpperCase();
+                        const pieceColor = isWhite ? 'white' : 'black';
+
+                        if(pieceColor !== byColor) continue;
+
+                        const { moves, captures } = this.calculateMovesRaw(r, c, piece);
+
+                        // Проверяем может ли эта фигура атаковать данную клетку
+                        if(captures.some(([captureRow, captureCol]) => captureRow === row && captureCol === col)) {
+                            return true;
+                        }
+
+                        // Для пешек также проверяем диагональную атаку (даже если там нет фигуры)
+                        const pieceType = piece.toLowerCase();
+                        if(pieceType === 'p') {
+                            const direction = isWhite ? -1 : 1;
+                            if(r + direction === row && (c - 1 === col || c + 1 === col)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+            }
+
+            findKing(color) {
+                // Находит позицию короля заданного цвета
+                for(let row = 0; row < 8; row++) {
+                    for(let col = 0; col < 8; col++) {
+                        const piece = this.board[row][col];
+                        if(piece && piece.toLowerCase() === 'k') {
+                            const isWhite = piece === piece.toUpperCase();
+                            const pieceColor = isWhite ? 'white' : 'black';
+                            if(pieceColor === color) {
+                                return { row, col };
+                            }
+                        }
+                    }
+                }
+                return null;
+            }
+
+            isInCheck(color) {
+                // Проверяет находится ли король заданного цвета под шахом
+                const kingPos = this.findKing(color);
+                if(!kingPos) return false;
+
+                const enemyColor = color === 'white' ? 'black' : 'white';
+                return this.isSquareUnderAttack(kingPos.row, kingPos.col, enemyColor);
+            }
+
+            wouldBeInCheck(fromRow, fromCol, toRow, toCol, color) {
+                // Проверяет будет ли король под шахом после хода
+                // Временно делаем ход
+                const piece = this.board[fromRow][fromCol];
+                const captured = this.board[toRow][toCol];
+
+                this.board[toRow][toCol] = piece;
+                this.board[fromRow][fromCol] = '';
+
+                // Проверяем шах
+                const inCheck = this.isInCheck(color);
+
+                // Отменяем ход
+                this.board[fromRow][fromCol] = piece;
+                this.board[toRow][toCol] = captured;
+
+                return inCheck;
+            }
+
+            calculateMovesRaw(row, col, piece) {
+                // Вычисляет ходы без проверки на шах (для проверки атак)
+                const moves = [];
+                const captures = [];
+                const pieceType = piece.toLowerCase();
+                const isWhite = piece === piece.toUpperCase();
+
+                switch(pieceType) {
+                    case 'p':
+                        const direction = isWhite ? -1 : 1;
+                        const startRow = isWhite ? 6 : 1;
+
+                        if(this.isValid(row + direction, col) && !this.board[row + direction][col]) {
+                            moves.push([row + direction, col]);
+
+                            if(row === startRow && !this.board[row + 2 * direction][col]) {
+                                moves.push([row + 2 * direction, col]);
+                            }
+                        }
+
+                        [[direction, -1], [direction, 1]].forEach(([dr, dc]) => {
+                            const newRow = row + dr;
+                            const newCol = col + dc;
+                            if(this.isValid(newRow, newCol)) {
+                                const target = this.board[newRow][newCol];
+                                if(target && ((isWhite && target === target.toLowerCase()) ||
+                                   (!isWhite && target === target.toUpperCase()))) {
+                                    captures.push([newRow, newCol]);
+                                }
+
+                                if(this.enPassantTarget && this.enPassantTarget.row === newRow && this.enPassantTarget.col === newCol) {
+                                    captures.push([newRow, newCol]);
+                                }
+                            }
+                        });
+                        break;
+
+                    case 'r':
+                        [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr, dc]) => {
+                            this.addLinearMoves(row, col, dr, dc, moves, captures, isWhite);
+                        });
+                        break;
+
+                    case 'n':
+                        [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr, dc]) => {
+                            const newRow = row + dr;
+                            const newCol = col + dc;
+                            if(this.isValid(newRow, newCol)) {
+                                const target = this.board[newRow][newCol];
+                                if(!target) {
+                                    moves.push([newRow, newCol]);
+                                } else if((isWhite && target === target.toLowerCase()) ||
+                                         (!isWhite && target === target.toUpperCase())) {
+                                    captures.push([newRow, newCol]);
+                                }
+                            }
+                        });
+                        break;
+
+                    case 'b':
+                        [[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([dr, dc]) => {
+                            this.addLinearMoves(row, col, dr, dc, moves, captures, isWhite);
+                        });
+                        break;
+
+                    case 'q':
+                        [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([dr, dc]) => {
+                            this.addLinearMoves(row, col, dr, dc, moves, captures, isWhite);
+                        });
+                        break;
+
+                    case 'k':
+                        for(let dr = -1; dr <= 1; dr++) {
+                            for(let dc = -1; dc <= 1; dc++) {
+                                if(dr === 0 && dc === 0) continue;
+                                const newRow = row + dr;
+                                const newCol = col + dc;
+                                if(this.isValid(newRow, newCol)) {
+                                    const target = this.board[newRow][newCol];
+                                    if(!target) {
+                                        moves.push([newRow, newCol]);
+                                    } else if((isWhite && target === target.toLowerCase()) ||
+                                             (!isWhite && target === target.toUpperCase())) {
+                                        captures.push([newRow, newCol]);
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                }
+
+                return { moves, captures };
+            }
+
             checkGameState() {
-                // Упрощенная проверка
+                const currentColor = this.currentTurn;
+                const inCheck = this.isInCheck(currentColor);
+
+                // Проверяем есть ли хоть один легальный ход
+                let hasLegalMove = false;
+
+                for(let row = 0; row < 8; row++) {
+                    for(let col = 0; col < 8; col++) {
+                        const piece = this.board[row][col];
+                        if(!piece) continue;
+
+                        const isWhite = piece === piece.toUpperCase();
+                        const pieceColor = isWhite ? 'white' : 'black';
+
+                        if(pieceColor !== currentColor) continue;
+
+                        const { moves, captures } = this.calculateMoves(row, col, piece);
+
+                        if(moves.length > 0 || captures.length > 0) {
+                            hasLegalMove = true;
+                            break;
+                        }
+                    }
+                    if(hasLegalMove) break;
+                }
+
+                if(!hasLegalMove) {
+                    if(inCheck) {
+                        // Мат
+                        this.gameState = 'finished';
+                        const winner = currentColor === 'white' ? 'black' : 'white';
+                        this.endGame(winner, 'checkmate');
+                    } else {
+                        // Пат
+                        this.gameState = 'finished';
+                        this.endGame(null, 'stalemate');
+                    }
+                } else if(inCheck) {
+                    // Просто шах
+                    this.updateStatus(`Шах ${currentColor === 'white' ? 'белым' : 'черным'}! Защитите короля`);
+                }
             }
             
             botMove() {
@@ -1308,6 +1466,52 @@
                 }
             }
             
+            endGame(winner, reason) {
+                this.gameState = 'finished';
+
+                const modal = document.getElementById('game-result');
+                const title = document.getElementById('result-title');
+                const message = document.getElementById('result-message');
+                const changeText = document.getElementById('change-text');
+
+                let ratingChange = 0;
+
+                if(reason === 'checkmate') {
+                    if(winner === this.playerColor) {
+                        title.textContent = 'Победа!';
+                        title.style.color = '#0f0';
+                        message.textContent = 'Вы поставили мат!';
+                        ratingChange = 10;
+                    } else {
+                        title.textContent = 'Поражение';
+                        title.style.color = '#f00';
+                        message.textContent = 'Вам поставили мат';
+                        ratingChange = -15;
+                    }
+                } else if(reason === 'stalemate') {
+                    title.textContent = 'Ничья';
+                    title.style.color = '#ff0';
+                    message.textContent = 'Пат - ничья';
+                    ratingChange = 0;
+                }
+
+                this.rating += ratingChange;
+                this.updateRatingDisplay();
+
+                if(ratingChange > 0) {
+                    changeText.textContent = `+${ratingChange} к рейтингу`;
+                    changeText.className = 'positive';
+                } else if(ratingChange < 0) {
+                    changeText.textContent = `${ratingChange} к рейтингу`;
+                    changeText.className = 'negative';
+                } else {
+                    changeText.textContent = 'Рейтинг не изменился';
+                    changeText.className = '';
+                }
+
+                modal.style.display = 'flex';
+            }
+
             updateRatingDisplay() {
                 document.getElementById('current-rating').textContent = this.rating;
                 document.getElementById('rating-value').textContent = this.rating;
